@@ -174,11 +174,79 @@ if uploaded_file:
                           title="Unit Price vs. Quantity")
         st.plotly_chart(fig3, use_container_width=True)
 
-    # ----- Data Table -----
+    # ----- 🔝 Top N Purchases by Category -----
+    st.markdown("## 🔝 Top Purchases Within Each Category")
+    metric_type = st.selectbox("📊 Show Top by:", ["Amount", "Quantity"])
+    top_n_cat = st.slider("🔢 Number of Top Items per Category", 3, 15, 5)
+
+    for category in sorted(filtered_df["Category"].unique()):
+        st.markdown(f"### 📁 {category}")
+        subset = filtered_df[filtered_df["Category"] == category]
+        top_subset = subset.groupby("Item Name")[metric_type].sum().nlargest(
+            top_n_cat).reset_index()
+        fig_cat = px.bar(
+            top_subset,
+            x="Item Name",
+            y=metric_type,
+            title=f"{category} - Top {top_n_cat} by {metric_type}",
+            text_auto=True)
+        st.plotly_chart(fig_cat, use_container_width=True)
+
+    # ----- 💸 Unusual Price Detector -----
+    st.markdown("## 💸 Unusual Price Alerts")
+
+    unusual_items = []
+    for cat in filtered_df["Category"].unique():
+        group = filtered_df[filtered_df["Category"] == cat]
+        avg_price_cat = group["Avg Price"].mean()
+        threshold = avg_price_cat * 1.5
+        flagged = group[group["Avg Price"] > threshold]
+        unusual_items.append(flagged)
+
+    unusual_df = pd.concat(unusual_items)
+    if not unusual_df.empty:
+        st.warning(f"⚠️ Found {len(unusual_df)} unusually priced items!")
+        st.dataframe(unusual_df)
+
+    # ----- 📦 Bulk Order Detector -----
+    st.markdown("## 📦 Bulk Order Detector")
+    bulk_orders = filtered_df[(filtered_df["Quantity"] > 500)
+                              & (filtered_df["Avg Price"] < 100)]
+    if not bulk_orders.empty:
+        st.info(
+            f"📦 Found {len(bulk_orders)} bulk orders (Qty > 500, Price < ₹100)"
+        )
+        st.dataframe(bulk_orders)
+    else:
+        st.success("✅ No bulk orders detected based on current filters.")
+
+    # ----- 📊 Extended Category Analytics -----
+    with st.expander("📊 Advanced Category Summary"):
+        col1, col2 = st.columns(2)
+
+        avg_price_by_cat = filtered_df.groupby(
+            "Category")["Avg Price"].mean().reset_index()
+        fig4 = px.bar(avg_price_by_cat,
+                      x="Category",
+                      y="Avg Price",
+                      title="Average Price per Category",
+                      text_auto=True)
+        col1.plotly_chart(fig4, use_container_width=True)
+
+        qty_by_cat = filtered_df.groupby(
+            "Category")["Quantity"].sum().reset_index()
+        fig5 = px.bar(qty_by_cat,
+                      x="Category",
+                      y="Quantity",
+                      title="Total Quantity per Category",
+                      text_auto=True)
+        col2.plotly_chart(fig5, use_container_width=True)
+
+    # ----- 📄 Data Table -----
     st.markdown("### 📄 Full Item Table")
     st.dataframe(filtered_df)
 
-    # ----- CSV Download -----
+    # ----- 📥 CSV Download -----
     csv = filtered_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download CSV",
                        data=csv,
@@ -187,3 +255,4 @@ if uploaded_file:
 
 else:
     st.info("📄 Upload a PDF file to begin analysis.")
+
