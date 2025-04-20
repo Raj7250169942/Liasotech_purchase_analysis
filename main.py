@@ -1,16 +1,46 @@
 import streamlit as st
+
+st.set_page_config(page_title="liasotech Purchase Analyzer", layout="wide")
 import pdfplumber
 import pandas as pd
 import re
 import plotly.express as px
 
+
+# Inject Custom CSS
+def local_css(css_code):
+    st.markdown(f"<style>{css_code}</style>", unsafe_allow_html=True)
+
+
+local_css("""
+body {
+    background: linear-gradient(120deg, #f6f9fc 0%, #e9eff5 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.stApp {
+    background-color: transparent;
+}
+.css-1d391kg { /* Sidebar */
+    background-color: #ffffffaa;
+}
+.css-1dp5vir { /* Sidebar container */
+    background-color: #ffffffaa;
+}
+.css-ffhzg2 { /* Header */
+    background-color: #f8f9fa !important;
+}
+""")
+
 # ---- Setup ----
-st.set_page_config(page_title="Liasotech Purchase Analyzer", layout="wide")
+
 st.title("📊 Liasotech Purchase Register Analyzer")
 
 # ---- PDF Upload ----
 uploaded_file = st.file_uploader("📤 Upload your purchase register PDF",
                                  type=["pdf"])
+
+# Initialize filtered_df for fallback access
+filtered_df = pd.DataFrame()
 
 if uploaded_file:
     data = []
@@ -34,7 +64,6 @@ if uploaded_file:
     df = pd.DataFrame(
         data, columns=["Item Name", "Quantity", "Amount", "Avg Price", "SKU"])
 
-    # ---- Auto-Categorize ----
     def tag_category(name):
         name = name.lower()
         if "filter" in name: return "Filters"
@@ -46,7 +75,6 @@ if uploaded_file:
 
     df["Category"] = df["Item Name"].apply(tag_category)
 
-    # ---- Sidebar Filters ----
     st.sidebar.header("🔍 Filters")
 
     if st.sidebar.button("🔄 Reset Filters"):
@@ -67,7 +95,6 @@ if uploaded_file:
                                                  default=categories,
                                                  key="category")
 
-    # ---- Apply Filters ----
     filtered_df = df.copy()
     if search:
         filtered_df = filtered_df[filtered_df["Item Name"].str.contains(
@@ -81,14 +108,12 @@ if uploaded_file:
         filtered_df = filtered_df[filtered_df["Category"].isin(
             selected_categories)]
 
-    # ---- KPIs ----
     st.subheader("📋 Purchase Summary")
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Amount", f"₹{filtered_df['Amount'].sum():,.2f}")
     col2.metric("Total Quantity", f"{filtered_df['Quantity'].sum():,.2f}")
     col3.metric("Unique Items", filtered_df['Item Name'].nunique())
 
-    # ---- Key Insights ----
     st.subheader("✨ Key Insights")
     try:
         most_purchased = filtered_df.loc[filtered_df["Quantity"].idxmax()]
@@ -108,14 +133,12 @@ if uploaded_file:
     - 🚀 **Largest Purchase:** ₹{max_amount:,.2f}
     """)
 
-    # ---- High-Value Items ----
     st.subheader("🚨 High-Value Purchases")
     high_value_df = filtered_df[filtered_df["Amount"] > 10000]
     if not high_value_df.empty:
         st.warning(f"{len(high_value_df)} purchases above ₹10,000 found.")
         st.dataframe(high_value_df)
 
-    # ---- Visual Charts ----
     st.subheader("📊 Visual Insights")
 
     top_metric = st.selectbox("Top Items By", ["Amount", "Quantity"])
@@ -139,7 +162,6 @@ if uploaded_file:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ---- Spend by Category ----
     with st.expander("📁 Spend by Category"):
         category_summary = filtered_df.groupby(
             "Category")["Amount"].sum().reset_index()
@@ -149,7 +171,6 @@ if uploaded_file:
                       text_auto=True)
         st.plotly_chart(fig2, use_container_width=True)
 
-    # ---- Quantity vs Price ----
     with st.expander("📉 Quantity vs. Unit Price"):
         fig3 = px.scatter(filtered_df,
                           x="Quantity",
@@ -160,7 +181,6 @@ if uploaded_file:
                           title="Unit Price vs Quantity")
         st.plotly_chart(fig3, use_container_width=True)
 
-    # ---- Top Items per Category ----
     st.subheader("🔝 Top Purchases Per Category")
     cat_metric = st.selectbox("Metric", ["Amount", "Quantity"])
     per_cat_n = st.slider("Top N per Category", 3, 15, 5)
@@ -173,7 +193,6 @@ if uploaded_file:
         fig = px.bar(top_sub, x="Item Name", y=cat_metric, text_auto=True)
         st.plotly_chart(fig, use_container_width=True)
 
-    # ---- Outliers: Unusual Pricing ----
     st.subheader("💸 Unusual Price Alerts")
     unusual = []
     for cat in filtered_df["Category"].unique():
@@ -186,7 +205,6 @@ if uploaded_file:
         st.warning(f"{len(outlier_df)} unusually priced items found.")
         st.dataframe(outlier_df)
 
-    # ---- Bulk Orders ----
     st.subheader("📦 Bulk Order Detector")
     bulk_df = filtered_df[(filtered_df["Quantity"] > 500)
                           & (filtered_df["Avg Price"] < 100)]
@@ -196,7 +214,6 @@ if uploaded_file:
     else:
         st.success("No bulk orders detected.")
 
-    # ---- Advanced Category Summary ----
     with st.expander("📊 Advanced Category Summary"):
         col1, col2 = st.columns(2)
         avg_by_cat = filtered_df.groupby(
@@ -218,68 +235,70 @@ if uploaded_file:
         col1.plotly_chart(fig1, use_container_width=True)
         col2.plotly_chart(fig2, use_container_width=True)
 
-    # ---- AI-Powered Analysis (with fallback) ----
-    # Keep everything above this the same...
+# ---- AI-Powered Analysis ----
+with st.expander("🤖 Ask AI About This Data", expanded=True):
+    st.markdown(
+        "Try asking things like: `Which category had the highest average price?` or `Top 5 expensive items?`"
+    )
+    if filtered_df.empty:
+        st.info("📄 Upload a PDF and apply filters to enable chat.")
+    question = st.text_input("💬 Ask a question")
 
-    # ---- AI-Powered Analysis (with fallback) ----
-    with st.expander("🤖 Ask AI About This Data"):
-        st.markdown(
-            "Try asking things like: `Which category had the highest average price?` or `Top 5 expensive items?`"
-        )
-        question = st.text_input("💬 Ask a question")
+    def smart_fallback(question):
+        q = question.lower()
 
-        def smart_fallback(question):
-            q = question.lower()
+        def _safe_idxmax(col):
+            return filtered_df.loc[
+                filtered_df[col].idxmax()] if not filtered_df.empty else None
 
-            def _safe_idxmax(col):
-                return filtered_df.loc[filtered_df[col].idxmax(
-                )] if not filtered_df.empty else None
+        if any(x in q for x in
+               ["highest average price", "avg price", "costliest category"]):
+            result = filtered_df.groupby(
+                "Category")["Avg Price"].mean().idxmax()
+            return f"📈 The category with the highest average unit price is **{result}**."
 
-            if any(
-                    x in q for x in
-                ["highest average price", "avg price", "costliest category"]):
-                result = filtered_df.groupby(
-                    "Category")["Avg Price"].mean().idxmax()
-                return f"📈 The category with the highest average unit price is **{result}**."
+        elif any(x in q for x in
+                 ["most purchased", "highest quantity", "max quantity"]):
+            row = _safe_idxmax("Quantity")
+            return f"🏆 Most purchased item is **{row['Item Name']}** with **{row['Quantity']} units**." if row is not None else "No data available."
 
-            elif any(x in q for x in
-                     ["most purchased", "highest quantity", "max quantity"]):
-                row = _safe_idxmax("Quantity")
-                return f"🏆 Most purchased item is **{row['Item Name']}** with **{row['Quantity']} units**." if row is not None else "No data available."
+        elif any(x in q for x in ["most expensive", "highest unit price"]):
+            row = _safe_idxmax("Avg Price")
+            return f"💎 Most expensive item is **{row['Item Name']}** at ₹{row['Avg Price']:.2f} per unit." if row is not None else "No data available."
 
-            elif any(x in q for x in ["most expensive", "highest unit price"]):
-                row = _safe_idxmax("Avg Price")
-                return f"💎 Most expensive item is **{row['Item Name']}** at ₹{row['Avg Price']:.2f} per unit." if row is not None else "No data available."
+        elif any(x in q
+                 for x in ["highest spend", "most spent", "biggest purchase"]):
+            row = _safe_idxmax("Amount")
+            return f"💰 Highest spend was on **{row['Item Name']}** totaling ₹{row['Amount']:,.2f}." if row is not None else "No data available."
 
-            elif any(x in q for x in
-                     ["highest spend", "most spent", "biggest purchase"]):
-                row = _safe_idxmax("Amount")
-                return f"💰 Highest spend was on **{row['Item Name']}** totaling ₹{row['Amount']:,.2f}." if row is not None else "No data available."
+        elif "top" in q and "items" in q:
+            match = re.search(r"top (\d+)", q)
+            n = int(match.group(1)) if match else 5
+            by = "Amount" if "amount" in q or "spend" in q else "Quantity" if "quantity" in q else "Amount"
+            top_items = filtered_df.groupby("Item Name")[by].sum().nlargest(
+                n).reset_index()
+            return f"📋 Top {n} items by {by.lower()}:\n" + "\n".join([
+                f"- {row['Item Name']} – ₹{row[by]:,.2f}" if by == "Amount"
+                else f"- {row['Item Name']} – {row[by]} units"
+                for _, row in top_items.iterrows()
+            ])
 
-            elif "top" in q and "items" in q:
-                match = re.search(r"top (\d+)", q)
-                n = int(match.group(1)) if match else 5
-                by = "Amount" if "amount" in q or "spend" in q else "Quantity" if "quantity" in q else "Amount"
-                top_items = filtered_df.groupby(
-                    "Item Name")[by].sum().nlargest(n).reset_index()
-                return f"📋 Top {n} items by {by.lower()}:\n" + "\n".join([
-                    f"- {row['Item Name']} – ₹{row[by]:,.2f}" if by == "Amount"
-                    else f"- {row['Item Name']} – {row[by]} units"
-                    for _, row in top_items.iterrows()
-                ])
+        elif "average price per category" in q:
+            result = filtered_df.groupby(
+                "Category")["Avg Price"].mean().reset_index()
+            return "📊 Average price per category:\n" + "\n".join([
+                f"- {r['Category']}: ₹{r['Avg Price']:.2f}"
+                for _, r in result.iterrows()
+            ])
 
-            elif "average price per category" in q:
-                result = filtered_df.groupby(
-                    "Category")["Avg Price"].mean().reset_index()
-                return "📊 Average price per category:\n" + "\n".join([
-                    f"- {r['Category']}: ₹{r['Avg Price']:.2f}"
-                    for _, r in result.iterrows()
-                ])
+        else:
+            return "🤖 Sorry, I can only answer basic data questions without external AI."
 
-            else:
-                return "🤖 Sorry, I can only answer basic data questions without external AI."
-
-        if question:
+    if question:
+        if filtered_df.empty:
+            st.warning(
+                "⚠️ Please upload and process a PDF before using the chatbot.")
+        else:
             with st.spinner("Analyzing..."):
                 try:
                     if "OPENAI_API_KEY" in st.secrets and st.secrets[
@@ -317,5 +336,3 @@ if uploaded_file:
                         "⚠️ AI not available or quota exceeded. Using local logic..."
                     )
                     st.markdown(smart_fallback(question))
-
-
